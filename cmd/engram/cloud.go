@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -71,11 +72,29 @@ type cloudServerRuntime interface {
 type defaultCloudRuntime struct {
 	server *cloudserver.CloudServer
 	store  *cloudstore.CloudStore
+	port   int
 }
 
 func (r *defaultCloudRuntime) Start() error {
 	defer r.store.Close()
+	if os.Getenv("RENDER") == "true" {
+		go selfPingLoop(r.port)
+	}
 	return r.server.Start()
+}
+
+// selfPingLoop hits /health every 10 seconds to prevent Render free-tier sleep.
+func selfPingLoop(port int) {
+	url := fmt.Sprintf("http://127.0.0.1:%d/health", port)
+	// Wait for server to be ready before first ping.
+	time.Sleep(5 * time.Second)
+	client := &http.Client{Timeout: 5 * time.Second}
+	for {
+		if _, err := client.Get(url); err != nil {
+			log.Printf("[self-ping] warning: %v", err)
+		}
+		time.Sleep(10 * time.Second)
+	}
 }
 
 var newCloudRuntime = func(cfg cloud.Config) (cloudServerRuntime, error) {
@@ -116,6 +135,7 @@ var newCloudRuntime = func(cfg cloud.Config) (cloudServerRuntime, error) {
 			cloudserver.WithSyncStatusProvider(cloudDashboardStatusProvider{store: cs, projects: allowedProjects}),
 		),
 		store: cs,
+		port:  cfg.Port,
 	}, nil
 }
 

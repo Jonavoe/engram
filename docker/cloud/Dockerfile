@@ -17,6 +17,6 @@ USER engram
 WORKDIR /home/engram
 COPY --from=builder /out/engram /usr/local/bin/engram
 
-EXPOSE 18080
+EXPOSE 8080
 ENTRYPOINT ["engram"]
 CMD ["cloud", "serve"]
